@@ -1,0 +1,39 @@
+# Deployed by Elastic Beanstalk's Docker platform (AL2023), which runs
+# `docker compose up` on the instance it manages for you. This is
+# almost identical to v1's docker-compose.yml -- same nginx, same
+# path-based routing, same frontend images (built with the *plain*
+# Dockerfile, not Dockerfile.ecs, because this nginx strips /app1 and
+# /app2 the same way v1's does) -- with two differences:
+#   1. `image:` instead of `build:` -- EB deploys pre-built images
+#      pushed to ECR by build_push.sh, it does not build them.
+#   2. No `db` service or volume -- state lives in RDS, provisioned by
+#      Terraform in this folder, outside anything EB manages.
+services:
+  backend:
+    image: ${BACKEND_IMAGE}
+    environment:
+      STORAGE_BACKEND: postgres
+      DB_HOST: ${DB_HOST}
+      DB_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+  frontend1:
+    image: ${FRONTEND_INSERT_IMAGE}
+    depends_on:
+      - backend
+
+  frontend2:
+    image: ${FRONTEND_LIST_IMAGE}
+    depends_on:
+      - backend
+
+  nginx:
+    image: ${NGINX_IMAGE}
+    ports:
+      - "80:80"
+    depends_on:
+      - frontend1
+      - frontend2
+      - backend

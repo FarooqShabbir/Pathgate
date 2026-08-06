@@ -1,0 +1,79 @@
+name: pathgate
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: pathgate-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pathgate}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pathgate}
+      POSTGRES_DB: ${POSTGRES_DB:-pathgate}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pathgate}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    # No `ports:` mapping -- the DB is reachable only from other
+    # containers on app-network, at db:5432. It is never exposed to
+    # the host or the internet.
+
+  backend:
+    build: ../apps/backend
+    container_name: pathgate-backend
+    environment:
+      STORAGE_BACKEND: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-pathgate}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pathgate}
+      POSTGRES_DB: ${POSTGRES_DB:-pathgate}
+      DB_HOST: db
+      DB_PORT: "5432"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app-network
+    # Reachable at backend:8000 from other containers only.
+
+  frontend1:
+    build: ../apps/frontend-insert
+    container_name: pathgate-frontend-insert
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    # Reachable at frontend1:3000 from other containers only.
+
+  frontend2:
+    build: ../apps/frontend-list
+    container_name: pathgate-frontend-list
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    # Reachable at frontend2:3000 from other containers only.
+
+  nginx:
+    build: ./nginx
+    container_name: pathgate-nginx
+    ports:
+      - "80:80"
+    depends_on:
+      - frontend1
+      - frontend2
+    networks:
+      - app-network
+    # The only container with a host port mapping. Every request from
+    # outside this Docker host enters here. Note `backend` is NOT a
+    # dependency here -- nginx never talks to it. frontend1/frontend2
+    # depend on it above because THEY are the ones proxying to it.
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  db_data:

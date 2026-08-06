@@ -1,0 +1,22 @@
+# Node
+node_modules/
+dist/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+
+# Lambda build artifacts
+v2-serverless-aws/lambda/backend/build/
+v2-serverless-aws/lambda/backend/function.zip
+
+# Local env files
+.env
