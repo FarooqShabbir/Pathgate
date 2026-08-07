@@ -1,63 +1,65 @@
-# v2 — Elastic Beanstalk (Docker platform)
+# v2 — Elastic Beanstalk via `eb` CLI (no Terraform, no load balancer)
 
-> **Read this first:** Elastic Beanstalk's Docker platform is not
-> serverless — it runs your containers on an EC2 Auto Scaling Group
-> that *Beanstalk* provisions, not you. Nothing in this Terraform
-> config calls `aws_instance`, but EC2 instances will exist in your
-> account once you `apply`. If the constraint is "zero EC2 anywhere,"
-> use [`ecs-fargate/`](../ecs-fargate) or [`lambda/`](../lambda)
-> instead, or swap this environment for **AWS App Runner** (the
-> closest EC2-free equivalent). This option is included because it
-> was explicitly asked for as one of the three to compare — treat it
-> as *"EC2 you don't manage yourself"*, not *"no EC2."*
+Same `docker-compose.yml` topology as v1 — nginx does the path routing,
+each frontend proxies its own `/api/*` calls to `backend`, `db` is a
+plain container with a volume, no RDS. Provisioned with the `eb` CLI
+reading this folder directly, not Terraform.
 
-## Why this variant reuses v1's nginx and frontend images unchanged
+**No load balancer**: the environment is created with
+`EnvironmentType: SingleInstance` (also passed as `eb create --single`
+below) — an Elastic IP goes straight on the one instance, no ALB in
+front of it at all.
 
-Unlike the ALB in the ECS Fargate variant, this deployment puts the
-*exact same* nginx from v1 in front of the *exact same* frontend
-images (the plain `Dockerfile`, not `Dockerfile.ecs`) — which means it
-also inherits v1's strict tiering for free: nginx only ever proxies to
-`frontend1`/`frontend2`; each frontend's own nginx is the only thing
-that proxies to `backend`; `backend` is the only thing that talks to
-the database. Elastic Beanstalk's Docker platform runs `docker compose
-up` on a single instance per app server, so the whole v1 topology
-comes across with only two changes:
+> **The EC2 caveat still applies, and can't be removed.** Elastic
+> Beanstalk's Docker platform has no serverless mode — `eb create`
+> always provisions an EC2 instance to run the containers on (a
+> Single-Instance environment still means *one EC2 instance*, just
+> without an Auto Scaling Group or ALB in front of it). Nothing here
+> calls `aws ec2 run-instances` directly, but Beanstalk does, on your
+> behalf, the moment you `eb create`. There is no way to run Elastic
+> Beanstalk's Docker platform without this — if "zero EC2, no
+> exceptions" is truly non-negotiable, Elastic Beanstalk itself is the
+> thing that has to be dropped from the comparison, not just its load
+> balancer or Auto Scaling Group. It's kept here because it was
+> explicitly named as one of the three platforms to demonstrate; flag
+> it if you want it removed instead.
 
-- `image:` (pull from ECR) instead of `build:` (build locally)
-- no `db` service — replaced by an external RDS instance
+## Prerequisites
 
-```
-Client
-  │ :80
-  ▼
-EB-managed ALB ──► EC2 instance (EB-managed ASG)
-                       │  docker compose up
-                       ▼
-                     nginx :80 ──► frontend1:3000 (/app1/*)
-                       │       ──► frontend2:3000 (/app2/*)
-                       │            (nginx never talks to backend)
-                       │
-                frontend1/frontend2's OWN nginx
-                       │  proxies /api/* onward
-                       ▼
-                  backend:8000
-                       │
-                       ▼
-                RDS Postgres :5432
-```
+- **EB CLI**: `pip install awsebcli` (or `pipx install awsebcli`).
+- An AWS CLI profile with credentials.
+- Docker, for building the 4 images locally before pushing to ECR.
 
 ## Deploy
 
 ```bash
 cd v2-serverless-aws/elastic-beanstalk
-terraform init
-terraform apply           # creates ECR repos, RDS, IAM roles (no environment images yet)
-./build_push.sh            # builds & pushes all 4 images
-terraform apply            # creates the EB application + environment
+
+POSTGRES_PASSWORD='choose-a-strong-password' ./build_push.sh
+# builds & pushes 4 images, writes .ebextensions/01-environment.config
+
+eb init pathgate-eb-compose --platform docker --region us-east-1
+eb create pathgate-eb-compose-env --single
 ```
 
-Open the `environment_url` output, then `/app1` and `/app2`.
+`eb create` uploads this folder (`docker-compose.yml` +
+`.ebextensions/`) as the application bundle. The generated
+`01-environment.config` sets `EnvironmentType: SingleInstance` (no
+load balancer) and the four image URIs + DB password as environment
+variables *before* Beanstalk ever runs `docker compose up` — so
+`${BACKEND_IMAGE}` etc. resolve correctly on the very first deploy,
+no separate `eb setenv` step needed.
 
-Nothing here has been applied — this creates real, billable resources
-(EC2 via the ASG, an ALB, RDS). Review `variables.tf` and the caveat
-above before running `apply`.
+Open the URL `eb create` prints (or `eb open`), then `/app1` and
+`/app2`.
+
+## Update / tear down
+
+```bash
+./build_push.sh    # rebuild + re-push if the app code changed
+eb deploy          # redeploy with the current .ebextensions + compose file
+eb terminate pathgate-eb-compose-env   # tear down when you're done
+```
+
+Nothing here has been deployed — `eb create` creates real, billable
+AWS resources (one EC2 instance, an Elastic IP, ECR images).

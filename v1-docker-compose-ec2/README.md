@@ -28,11 +28,11 @@ Editable architecture diagram: [docs/pathgate-v1-architecture.drawio](../docs/pa
                        volume: db_data
 ```
 
-Strict tiering, enforced by config (and, in the [EC2 guide](../docs/v1-manual-ec2-deployment.md),
-by security groups too): **nginx only ever talks to the two frontends.
-Each frontend only ever talks to backend. Backend is the only thing
-that talks to db.** nginx's config has no idea `backend` or `db`
-exist — see `nginx/nginx.conf` and `apps/frontend-insert/nginx.conf`.
+Strict tiering, enforced by config: **nginx only ever talks to the two
+frontends. Each frontend only ever talks to backend. Backend is the
+only thing that talks to db.** nginx's config has no idea `backend` or
+`db` exist — see `nginx/nginx.conf` and
+`apps/frontend-insert/nginx.conf`.
 
 ## Run it
 
@@ -74,16 +74,14 @@ anywhere — it cannot reach either one even if you tried, because
 nothing ever configures that route. Each frontend container is a
 small reverse proxy in its own right, not just a static file host.
 
-## Splitting this across separate EC2 instances
+## Deploying this to a real EC2 instance
 
-Full step-by-step walkthrough (console clicks, security groups,
-exact commands per box): **[docs/v1-manual-ec2-deployment.md](../docs/v1-manual-ec2-deployment.md)**.
+Full step-by-step walkthrough (console clicks, IAM role for SSM
+access, security group, exact commands): **[docs/v1-manual-ec2-deployment.md](../docs/v1-manual-ec2-deployment.md)**.
 
-Short version: this needs **5** instances, not 4 — nginx gets its own
-box too. Docker's bridge network doesn't span hosts, so service-name
-DNS is replaced by each instance's **private IP**, and the same
-tiering that's enforced by config here is additionally enforced by
-**security groups** there: the backend's security group only accepts
-inbound traffic from the frontend instances' security group — nginx's
-security group has no rule allowing it to reach backend at all, so the
-constraint holds even if a config file is ever wrong.
+Short version: launch one EC2 instance, install Docker, `git clone`
+this repo onto it, then `docker compose up --build -d` from this
+folder — this exact `docker-compose.yml`, unmodified. One security
+group rule (port 80 from `0.0.0.0/0`, for nginx) is the only inbound
+access the instance needs; management happens over SSM Session
+Manager, not SSH, so there's no key pair and no inbound port 22.

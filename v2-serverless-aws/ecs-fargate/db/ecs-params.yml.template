@@ -1,0 +1,27 @@
+# Rendered into ecs-params.yml by ../render-ecs-params.sh (gitignored
+# output -- it has account-specific IDs in it). No target group, no
+# load balancer anywhere in this file -- assign_public_ip is what
+# makes this task reachable/able to reach the internet on its own.
+version: 1
+task_definition:
+  task_execution_role: ${EXECUTION_ROLE_ARN}
+  ecs_network_mode: awsvpc
+  task_size:
+    mem_limit: 0.5GB
+    cpu_limit: 256
+run_params:
+  network_configuration:
+    awsvpc_configuration:
+      subnets:
+        - "${SUBNET_ID}"
+      security_groups:
+        - "${SG_DB_ID}"
+      assign_public_ip: ENABLED
+service_discovery:
+  container_name: db
+  container_port: 5432
+  private_dns_namespace:
+    vpc: "${VPC_ID}"
+    name: pathgate.local
+  service_discovery_service:
+    name: db

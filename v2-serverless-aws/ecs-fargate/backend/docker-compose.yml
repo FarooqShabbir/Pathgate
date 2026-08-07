@@ -1,0 +1,13 @@
+version: '3'
+services:
+  backend:
+    image: ${BACKEND_IMAGE}
+    ports:
+      - "8000:8000"
+    environment:
+      STORAGE_BACKEND: postgres
+      DB_HOST: db.pathgate.local
+      DB_PORT: "5432"
+      POSTGRES_DB: pathgate
+      POSTGRES_USER: pathgate
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}

@@ -1,0 +1,11 @@
+# The only service in this variant with an internet-facing security
+# group rule -- see ../README.md. No load balancer: assign_public_ip
+# in ecs-params.yml gives this task's ENI a real public IP directly,
+# and sg-nginx (created by 01-setup-foundation.sh) is the only
+# security group in the whole stack open to 0.0.0.0/0.
+version: '3'
+services:
+  nginx:
+    image: ${NGINX_IMAGE}
+    ports:
+      - "80:80"

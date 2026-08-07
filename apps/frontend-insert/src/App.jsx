@@ -2,16 +2,18 @@ import { useState } from 'react'
 
 // Build-time switch, because "how do I reach /api" is not the same
 // answer in every deployment:
-//   - v1 / Elastic Beanstalk: nginx STRIPS /app1/ before forwarding,
-//     so this container only ever sees /api/... -> a RELATIVE path
-//     ('api', the default below) is required, so the browser request
-//     stays /app1/api/... and lands on this container, not the gateway.
-//   - ECS Fargate / Lambda: the ALB / CloudFront do NOT strip the
-//     matched prefix, and route by the ORIGINAL path -> an ABSOLUTE
-//     path ('/api') is required instead, so the request is literally
-//     /api/... and matches the gateway's own /api/* rule directly,
-//     bypassing this container entirely. Their Dockerfile.ecs /
-//     deploy_frontends.sh set VITE_API_BASE=/api at build time.
+//   - v1, v2 ECS Fargate (ecs-cli), v2 Elastic Beanstalk: nginx
+//     STRIPS /app1/ before forwarding, so this container only ever
+//     sees /api/... -> a RELATIVE path ('api', the default below) is
+//     required, so the browser request stays /app1/api/... and lands
+//     on this container, not the gateway.
+//   - v2 Lambda: CloudFront does NOT strip the matched prefix, and
+//     routes by the ORIGINAL path -> an ABSOLUTE path ('/api') is
+//     required instead, so the request is literally /api/... and
+//     matches CloudFront's own /api/* behavior directly, bypassing
+//     this frontend entirely (there's no compute in S3 to proxy
+//     through anyway). deploy_frontends.sh sets VITE_API_BASE=/api
+//     at build time for that one case.
 // Get this backwards and requests 404 or silently return the app's
 // own index.html instead of JSON — there is no runtime fallback.
 const API_BASE = import.meta.env.VITE_API_BASE || 'api'

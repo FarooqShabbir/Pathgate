@@ -1,23 +1,32 @@
-# Deployed by Elastic Beanstalk's Docker platform (AL2023), which runs
-# `docker compose up` on the instance it manages for you. This is
-# almost identical to v1's docker-compose.yml -- same nginx, same
-# path-based routing, same frontend images (built with the *plain*
-# Dockerfile, not Dockerfile.ecs, because this nginx strips /app1 and
-# /app2 the same way v1's does) -- with two differences:
-#   1. `image:` instead of `build:` -- EB deploys pre-built images
-#      pushed to ECR by build_push.sh, it does not build them.
-#   2. No `db` service or volume -- state lives in RDS, provisioned by
-#      Terraform in this folder, outside anything EB manages.
+# Deployed by `eb create`/`eb deploy` (EB CLI), not Terraform. Elastic
+# Beanstalk's Docker platform runs `docker compose up` on the one EC2
+# instance it manages for you -- and unlike the ECS Fargate variant,
+# db stays a plain container + volume here too, exactly like v1, since
+# EB gives you one real host to put it on. No RDS, no ECR Terraform
+# resources: just this file plus four pushed images (build_push.sh)
+# and the env vars build_push.sh renders into
+# .ebextensions/01-environment.config.
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: pathgate
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: pathgate
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
   backend:
     image: ${BACKEND_IMAGE}
     environment:
       STORAGE_BACKEND: postgres
-      DB_HOST: ${DB_HOST}
+      DB_HOST: db
       DB_PORT: "5432"
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB: pathgate
+      POSTGRES_USER: pathgate
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      - db
 
   frontend1:
     image: ${FRONTEND_INSERT_IMAGE}
@@ -36,4 +45,6 @@ services:
     depends_on:
       - frontend1
       - frontend2
-      - backend
+
+volumes:
+  db_data:

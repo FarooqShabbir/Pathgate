@@ -1,0 +1,6 @@
+version: '3'
+services:
+  frontend1:
+    image: ${FRONTEND_INSERT_IMAGE}
+    ports:
+      - "3000:3000"

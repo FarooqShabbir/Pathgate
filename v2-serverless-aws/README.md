@@ -1,84 +1,67 @@
-# v2 — the same application, three AWS-managed infrastructures
+# v2 — AWS-managed infrastructure, each platform's own CLI (no Terraform, no EC2, no load balancer)
 
-Full, port-to-port architecture diagrams for each option, with a
-step-by-step "what gets called when you hit /app1" trace:
+Full, port-to-port architecture diagrams with a "what gets called when
+you hit /app1" trace, one per target:
 [ECS Fargate](../docs/pathgate-v2-ecs-fargate-architecture.drawio) ·
 [Elastic Beanstalk](../docs/pathgate-v2-elastic-beanstalk-architecture.drawio) ·
 [Lambda](../docs/pathgate-v2-lambda-architecture.drawio)
-(open any of them at [app.diagrams.net](https://app.diagrams.net) →
-File → Open From → Device).
+(open at [app.diagrams.net](https://app.diagrams.net) → File → Open
+From → Device).
 
-Same `apps/` source (one backend, two React frontends), same rule
-(app1 = insert-only, app2 = list-only, one shared backend and
-database), same routing scheme (`/app1`, `/app2`, `/api`) — three
-different ways to run it on AWS without provisioning an EC2 instance
-yourself:
+Every resource in this folder is created with a plain CLI tool —
+`ecs-cli`, `eb`, or `aws` itself — never Terraform or CloudFormation.
+Two hard constraints hold across all three targets: **no EC2 instance
+you provision yourself, and no load balancer, anywhere.**
 
 | | [`ecs-fargate/`](ecs-fargate) | [`elastic-beanstalk/`](elastic-beanstalk) | [`lambda/`](lambda) |
 |---|---|---|---|
-| Compute | Fargate tasks (serverless containers) | EC2 Auto Scaling Group, **managed by EB** | Lambda functions |
-| Router | Application Load Balancer | EB's ALB → nginx (reused from v1) | CloudFront |
-| Database | RDS Postgres | RDS Postgres | DynamoDB |
-| "No EC2" constraint | ✅ genuinely none | ⚠️ see the caveat in its README | ✅ genuinely none |
-| Frontend serving | Own container per app (nginx, prefix-aware) | Same images as v1, unchanged | S3 (static files) |
-| Reaches backend via | ALB routes `/api/*` straight to the backend target group | Each frontend's own nginx proxies `/api/*` to `backend` (same as v1) | CloudFront routes `/api/*` straight to API Gateway |
-| IaC | Terraform | Terraform | Terraform |
+| Tooling | `ecs-cli compose service up` | `eb` CLI | plain `aws` CLI |
+| Compute | Fargate tasks | **1 EC2 instance** — see caveat below | Lambda |
+| Public entry point | nginx task's own public IP (no ALB) | Elastic IP on the instance (Single-Instance env, no ELB) | CloudFront |
+| Database | Postgres container (ephemeral — no EFS wired up) | Postgres container + EBS volume (same as v1, no RDS) | DynamoDB |
+| Preserves v1's strict tiering? | ✅ yes — nginx is still the router | ✅ yes — same images as v1 | ⚠️ no frontend tier exists to proxy through — see its README |
 
-**Read the Elastic Beanstalk README's caveat before picking it** if
-"zero EC2" is a hard requirement — Beanstalk's Docker platform runs on
-an EC2 Auto Scaling Group it provisions for you. It's included because
-it was one of the three options asked for, but it does not satisfy a
-strict no-EC2 constraint the way the other two do.
+## The Elastic Beanstalk caveat, stated plainly
 
-## What's identical across all three, and why
+Elastic Beanstalk's Docker platform **cannot run without an EC2
+instance** — a Single-Instance environment (used here, see its README)
+removes the load balancer and Auto Scaling Group, but Beanstalk still
+provisions one EC2 instance to run the containers on. There is no
+serverless mode for it. If "zero EC2, no exceptions" is truly
+non-negotiable, Elastic Beanstalk is the thing that has to be dropped
+from this comparison — not something this folder can route around
+while still being Elastic Beanstalk. It's kept here because it was
+named as one of the three platforms to demonstrate.
 
-- The backend's routes are mounted under `/api` (not stripped by any
-  proxy in front of it) — see `apps/backend/app/main.py`.
-- The storage layer is selected by one environment variable
-  (`STORAGE_BACKEND`) — see `apps/backend/app/storage/`.
+## Why ECS Fargate uses `ecs-cli`, not Docker's `docker context create ecs`
 
-That's what makes three infrastructures from one codebase practical:
-the application code never encodes an assumption about what's routing
-to it or what's storing its data.
+Docker's newer ECS integration is simpler to write against, but it
+**always** creates a load balancer for any compose service with a
+published port — there's no setting to skip it. The classic AWS ECS
+CLI (`ecs-cli compose`) puts Fargate networking (subnet, security
+group, **public IP assignment**) in a separate `ecs-params.yml`
+instead, and nothing there requires a target group. That's the whole
+reason `ecs-fargate/` is structured the way it is — see its README for
+the full mechanics (Cloud Map instead of an ALB, one task per service
+instead of one task with five containers).
 
-## What's different, and why it had to be
+## What "no load balancer" costs you
 
-**v1 and Elastic Beanstalk enforce a strict tier chain**: nginx only
-ever talks to the two frontend containers; each frontend's own nginx
-is the only thing that talks to `backend`; `backend` is the only thing
-that talks to the database. The frontends' `fetch()` calls use a
-**relative** path (`api/items`, resolved against `/app1/` or `/app2/`)
-specifically so the request stays inside that chain instead of jumping
-straight from the gateway to the backend — see
-`apps/frontend-*/src/App.jsx` and `apps/frontend-*/nginx.conf`.
+Every public entry point in this folder is a **bare IP or a Lambda-era
+managed front door**, not a stable load-balanced DNS name:
 
-**ECS Fargate and Lambda do not (yet) do this.** Their gateways — the
-ALB and CloudFront — route `/api/*` directly to the backend target
-group / API Gateway, skipping the frontend tier entirely, because
-neither an ALB nor CloudFront can proxy application traffic through
-another one of your own containers the way nginx can. Giving them the
-same strict tiering would mean either ECS Service Connect (so the
-frontend containers proxy to `backend`'s internal service-discovery
-name) or a Lambda-based edge function in front of the S3 origins — real
-extra infrastructure, not a config tweak, and not built yet. Ask if you
-want that added.
+- ECS Fargate: nginx's task gets a public IP that changes if the task
+  is ever replaced.
+- Elastic Beanstalk: an Elastic IP, which *is* stable, but pinned to
+  one instance with no failover if that instance dies.
+- Lambda: CloudFront's domain is stable (it's not a load balancer, so
+  this constraint doesn't apply there at all) — this is the one
+  target where "no load balancer" costs nothing.
 
-A second, smaller consequence of no-strip-on-forward (true for the ALB
-and CloudFront, not nginx): the ECS Fargate frontends run their own
-small nginx that already knows its `/app1/` or `/app2/` prefix
-(`Dockerfile.ecs`), because nothing upstream of them strips it first.
+This is the direct, expected trade-off of the constraint, not a
+mistake — an ALB's whole job is normally absorbing exactly this
+problem.
 
-**This also means the frontend's `fetch()` target itself has to differ
-by deployment**, not just the routing behind it. v1/Beanstalk's
-relative `api/items` only works because nginx strips the prefix first
-— under an ALB or CloudFront, that same relative call would resolve to
-`/app1/api/items`, which matches the `/app1/*` rule (not `/api/*`) and
-never reaches the backend at all. `apps/frontend-*/src/App.jsx` reads
-this from `import.meta.env.VITE_API_BASE`, defaulting to the relative
-path; `Dockerfile.ecs` and `lambda/deploy_frontends.sh` both set
-`VITE_API_BASE=/api` at build time to switch it to absolute. Get this
-backwards and inserts/lists silently return HTML instead of JSON.
-
-Nothing in this folder has been deployed. Each subfolder's Terraform
-creates real, billable AWS resources on `apply` — review the
-variables and READMEs first.
+Nothing here has been deployed. Every script in every subfolder makes
+real, billable AWS API calls when you actually run it — review each
+README first.

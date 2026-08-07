@@ -1,60 +1,64 @@
-<mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1480" pageHeight="1550" math="0" shadow="0">
+<mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1480" pageHeight="1500" math="0" shadow="0">
   <root>
     <mxCell id="0" />
     <mxCell id="1" parent="0" />
 
-    <mxCell id="title" value="Pathgate v2 — Elastic Beanstalk" style="text;html=1;align=center;verticalAlign=middle;fontSize=24;fontStyle=1;fontColor=#1a1d1f;" vertex="1" parent="1">
-      <mxGeometry x="340" y="16" width="800" height="36" as="geometry" />
+    <mxCell id="title" value="Pathgate v2 — Elastic Beanstalk (Single Instance, no load balancer)" style="text;html=1;align=center;verticalAlign=middle;fontSize=24;fontStyle=1;fontColor=#1a1d1f;" vertex="1" parent="1">
+      <mxGeometry x="200" y="16" width="1080" height="36" as="geometry" />
     </mxCell>
-    <mxCell id="subtitle" value="Reuses v1's images unchanged — nginx does the routing again, one level down from EB's own ALB." style="text;html=1;align=center;verticalAlign=middle;fontSize=13;fontColor=#5b6167;" vertex="1" parent="1">
-      <mxGeometry x="280" y="50" width="920" height="24" as="geometry" />
+    <mxCell id="subtitle" value="EnvironmentType: SingleInstance — an Elastic IP goes straight on the instance, no ELB in front." style="text;html=1;align=center;verticalAlign=middle;fontSize=13;fontColor=#5b6167;" vertex="1" parent="1">
+      <mxGeometry x="240" y="50" width="1000" height="24" as="geometry" />
     </mxCell>
 
-    <mxCell id="caveat" value="&lt;b&gt;⚠ Not EC2-free&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11.5px&quot;&gt;Elastic Beanstalk's Docker platform&lt;br&gt;provisions and manages an EC2 Auto&lt;br&gt;Scaling Group for you. This Terraform&lt;br&gt;never calls aws_instance directly, but&lt;br&gt;an EC2 instance exists once you apply.&lt;br&gt;See the folder README for detail.&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#fdeded;strokeColor=#c0392b;fontColor=#1a1d1f;fontSize=13;spacingLeft=14;spacingTop=10;arcSize=6;" vertex="1" parent="1">
-      <mxGeometry x="60" y="100" width="330" height="180" as="geometry" />
+    <mxCell id="caveat" value="&lt;b&gt;⚠ Still 1 EC2 instance&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11.5px&quot;&gt;Removing the load balancer removes&lt;br&gt;the ELB and Auto Scaling Group, but&lt;br&gt;Beanstalk's Docker platform has no&lt;br&gt;serverless mode -- eb create still&lt;br&gt;provisions exactly one EC2 instance&lt;br&gt;to run docker compose on. There is&lt;br&gt;no way to remove that and still be&lt;br&gt;running Elastic Beanstalk. See the&lt;br&gt;folder README for detail.&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#fdeded;strokeColor=#c0392b;fontColor=#1a1d1f;fontSize=13;spacingLeft=14;spacingTop=10;arcSize=6;" vertex="1" parent="1">
+      <mxGeometry x="60" y="100" width="330" height="220" as="geometry" />
     </mxCell>
 
     <mxCell id="client" value="Browser" style="shape=image;html=1;verticalAlign=top;verticalLabelPosition=bottom;labelBackgroundColor=none;imageAspect=0;aspect=fixed;image=https://icons.diagrams.net/icon-cache1/Basic-2519/browser-809.svg;fontSize=13;fontStyle=1;fontColor=#1a1d1f;" vertex="1" parent="1">
       <mxGeometry x="710" y="110" width="60" height="60" as="geometry" />
     </mxCell>
 
-    <mxCell id="trace" value="&lt;b&gt;Trace: GET /app1/&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11.5px&quot;&gt;1. Browser → EB ALB :80&lt;br&gt;2. EB ALB forwards EVERYTHING to&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;the instance — no path rules; EB&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;itself does no routing here&lt;br&gt;3. docker-compose's nginx container&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;(:80 on the instance) does the&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;SAME path routing as v1&lt;br&gt;4. location /app1/ strips prefix →&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;frontend1:3000&lt;br&gt;5. container pathgate-frontend-insert&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;(pulled from ECR) serves it&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#fffbe6;strokeColor=#d4b106;fontColor=#1a1d1f;fontSize=13;spacingLeft=14;spacingTop=10;arcSize=6;" vertex="1" parent="1">
+    <mxCell id="trace" value="&lt;b&gt;Trace: GET /app1/&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11.5px&quot;&gt;1. Browser → Elastic IP :80&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;(pinned to the ONE instance,&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;no ELB in between)&lt;br&gt;2. docker-compose's nginx container&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;(:80 on the instance) does the&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;SAME path routing as v1&lt;br&gt;3. location /app1/ strips prefix →&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;frontend1:3000&lt;br&gt;4. container pathgate-eb-compose-&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;frontend-insert (pulled from ECR)&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;serves it&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#fffbe6;strokeColor=#d4b106;fontColor=#1a1d1f;fontSize=13;spacingLeft=14;spacingTop=10;arcSize=6;" vertex="1" parent="1">
       <mxGeometry x="1020" y="90" width="360" height="270" as="geometry" />
     </mxCell>
 
-    <mxCell id="eb-alb" value="&lt;b&gt;EB-managed ALB&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;created automatically by the&lt;br&gt;Elastic Beanstalk environment&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px;font-weight:bold&quot;&gt;listener :80&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ED7100;strokeColor=#8a4200;fontColor=#ffffff;fontSize=15;arcSize=8;shadow=0;spacing=6;" vertex="1" parent="1">
-      <mxGeometry x="600" y="330" width="280" height="110" as="geometry" />
+    <mxCell id="eip" value="&lt;b&gt;Elastic IP&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;attached directly to the instance&lt;br&gt;— no load balancer, no ASG&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px;font-weight:bold&quot;&gt;:80&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ED7100;strokeColor=#8a4200;fontColor=#ffffff;fontSize=15;arcSize=8;shadow=0;spacing=6;" vertex="1" parent="1">
+      <mxGeometry x="600" y="360" width="280" height="100" as="geometry" />
     </mxCell>
 
-    <mxCell id="ec2box" value="&lt;b&gt;EC2 instance&lt;/b&gt; (EB-managed Auto Scaling Group)&lt;br&gt;&lt;font style=&quot;font-size:12px;font-weight:normal;color:#8a4200&quot;&gt;runs: docker compose up — 4 containers, one bridge network&lt;/font&gt;" style="rounded=1;dashed=1;arcSize=4;strokeColor=#ED7100;fillColor=#ED710008;verticalAlign=top;align=left;fontSize=15;fontStyle=1;fontColor=#8a4200;spacingLeft=20;spacingTop=16;html=1;" vertex="1" parent="1">
-      <mxGeometry x="120" y="480" width="1240" height="760" as="geometry" />
+    <mxCell id="ec2box" value="&lt;b&gt;EC2 instance&lt;/b&gt; (Single-Instance Beanstalk environment)&lt;br&gt;&lt;font style=&quot;font-size:12px;font-weight:normal;color:#8a4200&quot;&gt;runs: docker compose up — 4 containers, one bridge network&lt;/font&gt;" style="rounded=1;dashed=1;arcSize=4;strokeColor=#ED7100;fillColor=#ED710008;verticalAlign=top;align=left;fontSize=15;fontStyle=1;fontColor=#8a4200;spacingLeft=20;spacingTop=16;html=1;" vertex="1" parent="1">
+      <mxGeometry x="120" y="500" width="1240" height="760" as="geometry" />
     </mxCell>
 
-    <mxCell id="nginx" value="&lt;b&gt;nginx&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px;font-family:monospace;color:#0a4a42&quot;&gt;image: pathgate-eb-nginx&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px;font-weight:bold;color:#0a4a42&quot;&gt;talks to frontends only&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px;font-weight:bold&quot;&gt;port 80&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0f6e63;strokeColor=#0a4a42;fontColor=#ffffff;fontSize=15;arcSize=8;shadow=0;spacing=6;" vertex="1" parent="1">
-      <mxGeometry x="640" y="530" width="280" height="130" as="geometry" />
+    <mxCell id="nginx" value="&lt;b&gt;nginx&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px;font-family:monospace;color:#0a4a42&quot;&gt;image: pathgate-eb-compose-nginx&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px;font-weight:bold;color:#0a4a42&quot;&gt;talks to frontends only&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px;font-weight:bold&quot;&gt;port 80&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0f6e63;strokeColor=#0a4a42;fontColor=#ffffff;fontSize=15;arcSize=8;shadow=0;spacing=6;" vertex="1" parent="1">
+      <mxGeometry x="640" y="550" width="280" height="130" as="geometry" />
     </mxCell>
 
-    <mxCell id="fe1" value="&lt;img src='https://icons.diagrams.net/assets/carbon-icons/1/Logo_React.svg' width='20' height='20'/&gt;&lt;br&gt;&lt;b&gt;frontend1&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10.5px;font-family:monospace;color:#1f4e79&quot;&gt;image: pathgate-eb-frontend-insert&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px;font-weight:bold;color:#3f7fbf&quot;&gt;INSERT ONLY · own nginx&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px;font-weight:bold&quot;&gt;port 3000&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eaf4ff;strokeColor=#3f7fbf;fontColor=#1a1d1f;fontSize=15;arcSize=8;spacing=6;" vertex="1" parent="1">
-      <mxGeometry x="180" y="700" width="320" height="180" as="geometry" />
+    <mxCell id="fe1" value="&lt;img src='https://icons.diagrams.net/assets/carbon-icons/1/Logo_React.svg' width='20' height='20'/&gt;&lt;br&gt;&lt;b&gt;frontend1&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10.5px;font-family:monospace;color:#1f4e79&quot;&gt;image: pathgate-eb-compose-frontend-insert&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px;font-weight:bold;color:#3f7fbf&quot;&gt;INSERT ONLY · own nginx&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px;font-weight:bold&quot;&gt;port 3000&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eaf4ff;strokeColor=#3f7fbf;fontColor=#1a1d1f;fontSize=15;arcSize=8;spacing=6;" vertex="1" parent="1">
+      <mxGeometry x="180" y="720" width="320" height="180" as="geometry" />
     </mxCell>
 
-    <mxCell id="fe2" value="&lt;img src='https://icons.diagrams.net/assets/carbon-icons/1/Logo_React.svg' width='20' height='20'/&gt;&lt;br&gt;&lt;b&gt;frontend2&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10.5px;font-family:monospace;color:#1f4e79&quot;&gt;image: pathgate-eb-frontend-list&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px;font-weight:bold;color:#3f7fbf&quot;&gt;LIST ONLY · own nginx&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px;font-weight:bold&quot;&gt;port 3000&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eaf4ff;strokeColor=#3f7fbf;fontColor=#1a1d1f;fontSize=15;arcSize=8;spacing=6;" vertex="1" parent="1">
-      <mxGeometry x="980" y="700" width="320" height="180" as="geometry" />
+    <mxCell id="fe2" value="&lt;img src='https://icons.diagrams.net/assets/carbon-icons/1/Logo_React.svg' width='20' height='20'/&gt;&lt;br&gt;&lt;b&gt;frontend2&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10.5px;font-family:monospace;color:#1f4e79&quot;&gt;image: pathgate-eb-compose-frontend-list&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px;font-weight:bold;color:#3f7fbf&quot;&gt;LIST ONLY · own nginx&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px;font-weight:bold&quot;&gt;port 3000&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eaf4ff;strokeColor=#3f7fbf;fontColor=#1a1d1f;fontSize=15;arcSize=8;spacing=6;" vertex="1" parent="1">
+      <mxGeometry x="980" y="720" width="320" height="180" as="geometry" />
     </mxCell>
 
-    <mxCell id="backend" value="&lt;b&gt;backend&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10.5px;font-family:monospace;color:#8a3a0f&quot;&gt;image: pathgate-eb-backend&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px;font-weight:bold;color:#b3541e&quot;&gt;reached only via frontends&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px;font-weight:bold&quot;&gt;port 8000&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fdeee0;strokeColor=#b3541e;fontColor=#1a1d1f;fontSize=15;arcSize=8;spacing=6;" vertex="1" parent="1">
-      <mxGeometry x="640" y="960" width="280" height="150" as="geometry" />
+    <mxCell id="backend" value="&lt;b&gt;backend&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10.5px;font-family:monospace;color:#8a3a0f&quot;&gt;image: pathgate-eb-compose-backend&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px;font-weight:bold;color:#b3541e&quot;&gt;reached only via frontends&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px;font-weight:bold&quot;&gt;port 8000&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fdeee0;strokeColor=#b3541e;fontColor=#1a1d1f;fontSize=15;arcSize=8;spacing=6;" vertex="1" parent="1">
+      <mxGeometry x="640" y="980" width="280" height="150" as="geometry" />
     </mxCell>
 
-    <mxCell id="rds" value="&lt;b&gt;RDS PostgreSQL&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10.5px;font-family:monospace;color:#8a2a90&quot;&gt;identifier: pathgate-eb-db&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px;font-weight:bold;color:#6b4fa0&quot;&gt;outside the instance — managed RDS&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px;font-weight:bold&quot;&gt;port 5432&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#efe9fb;strokeColor=#6b4fa0;fontColor=#1a1d1f;fontSize=15;arcSize=8;spacing=6;" vertex="1" parent="1">
-      <mxGeometry x="640" y="1300" width="280" height="150" as="geometry" />
+    <mxCell id="db" value="&lt;b&gt;db&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10.5px;font-family:monospace;color:#4a3572&quot;&gt;PostgreSQL 16&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px;font-weight:bold;color:#6b4fa0&quot;&gt;reached only via backend — no RDS,&lt;br&gt;plain container on this instance&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px;font-weight:bold&quot;&gt;port 5432&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#efe9fb;strokeColor=#6b4fa0;fontColor=#1a1d1f;fontSize=15;arcSize=8;spacing=6;" vertex="1" parent="1">
+      <mxGeometry x="640" y="1170" width="280" height="150" as="geometry" />
     </mxCell>
 
-    <mxCell id="e1" value="① :80" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=12;fontColor=#1a1d1f;labelBackgroundColor=#ffffff;strokeColor=#1a1d1f;strokeWidth=1.5;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="client" target="eb-alb">
+    <mxCell id="vol" value="&lt;b&gt;db_data&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;Docker volume on&lt;br&gt;the instance's EBS&lt;/font&gt;" style="rounded=1;dashed=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#8a8f96;fontColor=#5b6167;fontSize=13;arcSize=8;" vertex="1" parent="1">
+      <mxGeometry x="960" y="1180" width="220" height="120" as="geometry" />
+    </mxCell>
+
+    <mxCell id="e1" value="① :80" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=12;fontColor=#1a1d1f;labelBackgroundColor=#ffffff;strokeColor=#1a1d1f;strokeWidth=1.5;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="client" target="eip">
       <mxGeometry relative="1" as="geometry" />
     </mxCell>
 
-    <mxCell id="e2" value="② all traffic → instance :80" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=12;fontColor=#1a1d1f;labelBackgroundColor=#ffffff;strokeColor=#8a4200;strokeWidth=1.5;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="eb-alb" target="nginx">
+    <mxCell id="e2" value="② instance :80 → nginx container" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=12;fontColor=#1a1d1f;labelBackgroundColor=#ffffff;strokeColor=#8a4200;strokeWidth=1.5;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="eip" target="nginx">
       <mxGeometry relative="1" as="geometry" />
     </mxCell>
 
@@ -78,15 +82,25 @@
       <mxGeometry relative="1" as="geometry" />
     </mxCell>
 
-    <mxCell id="e6" value="⑤ SQL :5432" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=12;fontColor=#1a1d1f;labelBackgroundColor=#ffffff;strokeColor=#6b4fa0;strokeWidth=1.5;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="backend" target="rds">
+    <mxCell id="e6" value="⑤ SQL → :5432" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=12;fontColor=#1a1d1f;labelBackgroundColor=#ffffff;strokeColor=#6b4fa0;strokeWidth=1.5;endArrow=block;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="backend" target="db">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <mxCell id="e7" value="mounted at" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=11;fontColor=#5b6167;labelBackgroundColor=#ffffff;strokeColor=#8a8f96;dashed=1;endArrow=none;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="db" target="vol">
       <mxGeometry relative="1" as="geometry" />
     </mxCell>
 
     <mxCell id="legend" value="Configuration notes" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fillColor=#f6f5f1;strokeColor=#d8d5cd;fontColor=#1a1d1f;fontSize=15;fontStyle=1;spacingLeft=18;spacingTop=14;arcSize=4;" vertex="1" parent="1">
-      <mxGeometry x="60" y="1470" width="1360" height="60" as="geometry" />
+      <mxGeometry x="60" y="1300" width="1360" height="140" as="geometry" />
     </mxCell>
-    <mxCell id="legend1" value="1. This is the ONLY v2 variant that inherits v1's strict frontend→backend proxy pattern unmodified — same images, same nginx.conf." style="text;html=1;align=left;verticalAlign=top;fontSize=12.5;fontColor=#1a1d1f;spacing=2;" vertex="1" parent="1">
-      <mxGeometry x="90" y="1505" width="1300" height="20" as="geometry" />
+    <mxCell id="legend1" value="1. EnvironmentType: SingleInstance (set via .ebextensions AND eb create --single) is what removes the ELB — everything else is identical to v1's compose file." style="text;html=1;align=left;verticalAlign=top;fontSize=12.5;fontColor=#1a1d1f;spacing=2;" vertex="1" parent="1">
+      <mxGeometry x="90" y="1340" width="1300" height="24" as="geometry" />
+    </mxCell>
+    <mxCell id="legend2" value="2. No RDS: db is a plain container with an EBS-backed Docker volume, same pattern as v1 — this is the only v2 variant that inherits v1's tiering completely unmodified." style="text;html=1;align=left;verticalAlign=top;fontSize=12.5;fontColor=#1a1d1f;spacing=2;" vertex="1" parent="1">
+      <mxGeometry x="90" y="1364" width="1300" height="24" as="geometry" />
+    </mxCell>
+    <mxCell id="legend3" value="3. Deployed with the eb CLI (eb init / eb create --single / eb deploy), not Terraform." style="text;html=1;align=left;verticalAlign=top;fontSize=12.5;fontColor=#1a1d1f;spacing=2;" vertex="1" parent="1">
+      <mxGeometry x="90" y="1388" width="1300" height="24" as="geometry" />
     </mxCell>
 
   </root>

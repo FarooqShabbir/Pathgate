@@ -7,16 +7,20 @@ __pycache__/
 *.pyc
 .venv/
 
-# Terraform
-**/.terraform/
-*.tfstate
-*.tfstate.*
-*.tfplan
-crash.log
-
 # Lambda build artifacts
 v2-serverless-aws/lambda/backend/build/
 v2-serverless-aws/lambda/backend/function.zip
 
 # Local env files
 .env
+
+# Elastic Beanstalk CLI local state + generated env config (contains
+# account ID / image URIs / DB password -- rendered by build_push.sh
+# from 01-environment.config.template, which IS tracked)
+.elasticbeanstalk/
+v2-serverless-aws/elastic-beanstalk/.ebextensions/
+
+# ECS Fargate (ecs-cli): generated, account-specific -- the
+# .template files are what's tracked
+v2-serverless-aws/ecs-fargate/.env.foundation
+v2-serverless-aws/ecs-fargate/*/ecs-params.yml

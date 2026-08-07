@@ -1,0 +1,16 @@
+# Deployed with `ecs-cli compose service up`, not `docker compose up` --
+# see ../README.md for why (the newer `docker context create ecs`
+# integration can't skip creating a load balancer; the classic AWS
+# ECS CLI can). Fargate-specific settings (network mode, public IP,
+# task sizing, Cloud Map registration) live in ecs-params.yml next to
+# this file, not here -- this file only describes the container.
+version: '3'
+services:
+  db:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: pathgate
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: pathgate

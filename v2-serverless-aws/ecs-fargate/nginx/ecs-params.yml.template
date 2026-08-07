@@ -1,0 +1,18 @@
+# No service_discovery block here -- nothing else needs to find nginx
+# by name, it's the entry point. It just needs a public IP, which
+# assign_public_ip gives it directly (no load balancer in front).
+version: 1
+task_definition:
+  task_execution_role: ${EXECUTION_ROLE_ARN}
+  ecs_network_mode: awsvpc
+  task_size:
+    mem_limit: 0.5GB
+    cpu_limit: 256
+run_params:
+  network_configuration:
+    awsvpc_configuration:
+      subnets:
+        - "${SUBNET_ID}"
+      security_groups:
+        - "${SG_NGINX_ID}"
+      assign_public_ip: ENABLED

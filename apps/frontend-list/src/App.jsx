@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react'
 
 // Build-time switch — see the matching comment in
 // frontend-insert/src/App.jsx for the full explanation. Short version:
-// relative ('api', default) for v1/Elastic Beanstalk, where nginx
-// strips /app2/ before this container ever sees the request; absolute
-// ('/api', via VITE_API_BASE) for ECS Fargate/Lambda, whose gateways
-// route by the original, unstripped path.
+// relative ('api', default) for v1, v2 ECS Fargate, and v2 Elastic
+// Beanstalk, where nginx strips /app2/ before this container ever
+// sees the request; absolute ('/api', via VITE_API_BASE) only for v2
+// Lambda, whose CloudFront routes by the original, unstripped path.
 const API_BASE = import.meta.env.VITE_API_BASE || 'api'
 
 export default function App() {

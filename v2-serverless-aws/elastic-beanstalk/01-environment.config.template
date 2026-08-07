@@ -1,0 +1,20 @@
+# Rendered into .ebextensions/01-environment.config by build_push.sh
+# (that output path is gitignored -- it contains your AWS account ID
+# and DB password). EB applies any .ebextensions/*.config file's
+# option_settings automatically on `eb create`/`eb deploy`, which is
+# what lets docker-compose.yml's ${BACKEND_IMAGE} etc. resolve on the
+# very first deploy instead of needing a separate `eb setenv` step.
+#
+# EnvironmentType: SingleInstance is the no-load-balancer setting --
+# without it, EB's default is a load-balanced environment with an ALB
+# in front. This is also set via `eb create --single` in the README
+# (belt and suspenders; either alone is enough).
+option_settings:
+  aws:elasticbeanstalk:environment:
+    EnvironmentType: SingleInstance
+  aws:elasticbeanstalk:application:environment:
+    BACKEND_IMAGE: ${BACKEND_IMAGE}
+    FRONTEND_INSERT_IMAGE: ${FRONTEND_INSERT_IMAGE}
+    FRONTEND_LIST_IMAGE: ${FRONTEND_LIST_IMAGE}
+    NGINX_IMAGE: ${NGINX_IMAGE}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
