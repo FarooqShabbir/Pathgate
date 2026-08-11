@@ -79,9 +79,16 @@ the actual nginx config lives.
 - `docker`, logged in enough to build and push images.
 - An IAM identity with permission to create EKS clusters, EC2
   instances/ASGs, IAM roles/policies, and (later) an ALB. This is a
-  much bigger permission set than `pathgate-ssm-role` from v1 — use
-  your own admin-capable credentials for the commands in this guide,
-  not the EC2 instance's SSM role.
+  much bigger permission set than `pathgate-ssm-role` from v1 normally
+  carries. If you're running this from the v1 EC2 instance, the
+  simplest fix is attaching `AdministratorAccess` directly to
+  `pathgate-ssm-role` itself (IAM Console → Roles → `pathgate-ssm-role`
+  → Add permissions) — it can't grant itself permissions from inside
+  the instance (deliberately, to block privilege escalation), so this
+  one step has to happen from the Console, not a command. Worth naming
+  plainly: this widens the role's permissions *permanently*, not just
+  for this session — detach it in cleanup (§20) if you care about
+  getting back to least-privilege afterward.
 
 Confirm the basics:
 ```bash
@@ -90,14 +97,22 @@ eksctl version
 kubectl version --client
 ```
 
-Set a couple of variables you'll reuse throughout this guide:
+Set a couple of variables you'll reuse throughout this guide. Match
+`AWS_REGION` to whatever region you actually want the cluster in —
+it has to agree with `region:` in `v3-eks/cluster/cluster.yaml`,
+since that file's value is what actually governs where `eksctl
+create cluster` puts things, not this variable:
 ```bash
-export AWS_REGION=us-east-1
+export AWS_REGION=ap-southeast-1   # match cluster.yaml's region: field
 export CLUSTER_NAME=pathgate-eks
 export ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 ```
 (These are just shell variables in your current session — if you
-reconnect later, e.g. over SSM, re-export them before continuing.)
+reconnect later, e.g. over SSM, re-export them before continuing. A
+mismatch here is exactly how you end up with two clusters in two
+regions without realizing it — `aws eks list-clusters --region
+<region>` in a couple of regions is a cheap sanity check if anything
+about cluster state ever looks surprising.)
 
 ## 2. Create the EKS cluster
 
@@ -223,6 +238,21 @@ kubectl -n kube-system logs deployment/cluster-autoscaler --tail=20
 HPA (§16) needs a CPU/memory data source to scale against — without
 this, `kubectl get hpa` shows `<unknown>/70%` forever and never scales
 anything.
+
+**Check first whether it's already there as an EKS-managed add-on** —
+some cluster creation paths (including, apparently, whatever created
+this project's own test cluster) end up with one pre-installed:
+```bash
+aws eks list-addons --cluster-name $CLUSTER_NAME --region $AWS_REGION
+```
+If `metrics-server` is in that list, skip straight to the `kubectl
+top nodes` check at the bottom of this section — it's already
+running. Applying the community manifest on top of an existing
+EKS-managed add-on causes exactly the kind of conflict described in
+§19's troubleshooting entry (`field is immutable`, duplicate port
+names) because the add-on's Deployment uses different labels/a
+different selector than the upstream manifest. Only run the commands
+below if `metrics-server` is genuinely absent from that list.
 
 ```bash
 kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
@@ -451,13 +481,26 @@ resolve `db` to `db-0`'s actual Pod IP via DNS, rather than load
 balancing across replicas that don't exist here (this StatefulSet
 only ever runs 1 replica).
 
-Watch it come up:
+Notice `03-db-statefulset.yaml` sets `PGDATA` to
+`/var/lib/postgresql/data/pgdata`, a subdirectory of the mount, not
+the mount point itself — a freshly-provisioned EBS volume gets an
+ext4 `lost+found` directory at its root, and `initdb` refuses to
+initialize into a directory that already contains something. Without
+this, `db-0` crash-loops on first boot with `initdb: error: directory
+"/var/lib/postgresql/data" exists but is not empty`.
+
+Watch it come up (`-w`/`--watch` only works against a single resource
+type, so `pods` first, then check the other two once it settles):
 ```bash
-kubectl get statefulset,pods,pvc -n pathgate -w
+kubectl get pods -n pathgate -w
 ```
-Ctrl-C once `db-0` shows `1/1 Running` and the PVC shows `Bound`. This
-can take a minute or two the first time — the EBS CSI driver has to
-actually provision and attach a real EBS volume.
+Ctrl-C once `db-0` shows `1/1 Running`, then:
+```bash
+kubectl get statefulset,pvc -n pathgate
+```
+Confirm the PVC shows `Bound`. This can take a minute or two the first
+time — the EBS CSI driver has to actually provision and attach a real
+EBS volume.
 
 If the PVC sits `Pending`, see §19's troubleshooting entry before
 assuming something's broken — `WaitForFirstConsumer` binding mode
@@ -627,6 +670,31 @@ removing it.
 
 ## 19. Troubleshooting
 
+- **`kubectl apply` on `components.yaml` fails with `spec.selector:
+  ... field is immutable` and/or `Duplicate value: "https"`**: an
+  EKS-managed `metrics-server` add-on is already installed and its
+  Deployment doesn't match the upstream community manifest's labels —
+  see the check at the top of §4. Fix: `kubectl delete deployment
+  metrics-server -n kube-system`, `kubectl delete service
+  metrics-server -n kube-system`, then reapply the community manifest
+  fresh — or better, don't touch it at all if `kubectl top nodes`
+  already works, and use the add-on as-is.
+- **Installing the AWS Load Balancer Controller's `_full.yaml` fails
+  with `no matches for kind "Certificate"/"Issuer" in version
+  "cert-manager.io/v1"`**: cert-manager isn't installed yet — it has
+  to go **before** the ALB Controller (§6, before §7), not after. If
+  you already applied the ALB Controller manifest out of order and its
+  Pods are stuck `ContainerCreating` waiting on a `aws-load-balancer-webhook-tls`
+  secret that doesn't exist, and installing cert-manager itself then
+  fails with `no endpoints available for service
+  "aws-load-balancer-webhook-service"` — that's the two controllers
+  deadlocking each other (the ALB Controller's webhook blocks all new
+  `Service` objects cluster-wide, including cert-manager's own,
+  while its own Pods aren't ready to serve that webhook). Break it by
+  temporarily deleting the ALB Controller's webhook configs
+  (`kubectl delete mutatingwebhookconfiguration/validatingwebhookconfiguration
+  aws-load-balancer-webhook`), let cert-manager finish, then reapply
+  `v2_9_0_full.yaml` to recreate them and issue the cert.
 - **PVC stuck `Pending`**: `kubectl describe pvc db-data-db-0 -n pathgate`.
   Two normal-vs-broken cases look identical at a glance — check the
   `Events` at the bottom: `waiting for first consumer to be created

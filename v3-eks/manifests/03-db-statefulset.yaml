@@ -27,6 +27,14 @@ spec:
           envFrom:
             - secretRef:
                 name: pathgate-db-credentials
+          env:
+            # A freshly-provisioned EBS volume gets an ext4 `lost+found`
+            # directory at its root -- if PGDATA is the mount point
+            # itself, initdb sees that non-empty directory and refuses
+            # to initialize. Pointing PGDATA at a subdirectory of the
+            # mount avoids it entirely.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
           volumeMounts:
             - name: db-data
               mountPath: /var/lib/postgresql/data
