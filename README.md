@@ -14,7 +14,8 @@ pathgate-microservices-lab/
 │   ├── backend/                 # FastAPI, storage-backend-agnostic
 │   ├── frontend-insert/         # React (Vite) — app1, insert-only, own nginx proxies to backend
 │   └── frontend-list/           # React (Vite) — app2, list-only, own nginx proxies to backend
-├── docs/                        # architecture diagrams + the manual EC2 deployment guide
+├── architecture diagrams/       # architecture diagrams images
+├── docs/                        # architecture diagrams draw.io + the manual EC2 deployment guide
 ├── v1-docker-compose-ec2/       # ONE EC2 instance, docker-compose, 5 containers, one bridge network
 ├── v2-serverless-aws/           # same app, no EC2 you provision, no load balancer anywhere
 │   ├── ecs-fargate/             # ecs-cli compose — Cloud Map instead of an ALB
