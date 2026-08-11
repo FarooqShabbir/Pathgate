@@ -132,7 +132,7 @@ than the node group currently has.
 ## Teardown
 
 Typed step-by-step, in the right order (Ingress → namespace → cluster)
-so nothing gets orphaned: **[docs/v3-eks-manual-deployment.md §19](../docs/v3-eks-manual-deployment.md#19-cost-and-cleanup)**.
+so nothing gets orphaned: **[docs/v3-eks-manual-deployment.md §20](../docs/v3-eks-manual-deployment.md#20-cost-and-cleanup)**.
 This is the most expensive-to-forget-about part of this whole project
 if left running — the EKS control plane bills hourly on its own, on
 top of the node group's EC2 instances and the ALB.

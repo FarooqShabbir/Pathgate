@@ -54,7 +54,7 @@ machines so a single node failure doesn't take the whole app down).
 Cluster Autoscaler can grow that to 4 if HPA scales enough Pods that
 the 2 nodes run out of allocatable CPU/memory to place them on, and
 shrinks back down to 2 once the extra capacity is idle. You'll watch
-this happen in §17.
+this happen in §18.
 
 **Why there's now a ConfigMap** (there wasn't one in earlier revisions
 of this variant): every other Pathgate variant bakes its nginx config
@@ -65,7 +65,7 @@ changing routing means rebuilding and repushing the image. Here,
 **ConfigMap** and mounted into the running container at
 `/etc/nginx/conf.d/default.conf` (see `07-`/`09-frontend*-deployment.yaml.template`).
 That's the Kubernetes-native way to decouple config from image: edit
-the ConfigMap, restart the Deployment, no image rebuild. §12 creates
+the ConfigMap, restart the Deployment, no image rebuild. §13 creates
 these two ConfigMaps directly from the existing `nginx.eks.conf`
 files — there's no separate YAML for them, so there's only one place
 the actual nginx config lives.
@@ -116,7 +116,7 @@ eksctl create cluster -f v3-eks/cluster/cluster.yaml
 
 This takes **15–20 minutes**. It creates, in order: a dedicated VPC
 (unless you point it at an existing one), the EKS control plane, an
-OIDC provider for the cluster (needed for IRSA in §4 and §7), the
+OIDC provider for the cluster (needed for IRSA in §3 and §7), the
 `pathgate-ng` managed node group (2 × `t3.medium`), and the
 `vpc-cni`, `coredns`, `kube-proxy`, and `aws-ebs-csi-driver` add-ons.
 The EBS CSI driver add-on is what lets `db`'s PersistentVolumeClaim
@@ -262,7 +262,43 @@ eksctl create iamserviceaccount \
   --approve
 ```
 
-## 6. Install the AWS Load Balancer Controller
+## 6. Install cert-manager
+
+The ALB Controller's install manifest (`v2_9_0_full.yaml`, next
+section) includes a `Certificate`/`Issuer` pair that **cert-manager**
+is responsible for fulfilling — that's how the manifest gets the
+webhook server's TLS cert without needing Helm's cert-generation job.
+Install cert-manager **before** the ALB Controller, not after:
+
+```bash
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+```
+```bash
+kubectl -n cert-manager rollout status deployment/cert-manager
+kubectl -n cert-manager rollout status deployment/cert-manager-webhook
+kubectl -n cert-manager rollout status deployment/cert-manager-cainjector
+```
+
+**Why this order matters — a real deadlock if you get it backwards**:
+the ALB Controller's `MutatingWebhookConfiguration` intercepts *every*
+new `Service` object cluster-wide. If the ALB Controller is installed
+first and its Pods are stuck waiting on a TLS secret that doesn't
+exist yet, that webhook has zero ready endpoints — so when
+cert-manager's own install tries to create *its* Services, the API
+server calls out to a webhook that can't answer, and cert-manager's
+install fails with `no endpoints available for service
+"aws-load-balancer-webhook-service"`. Both sides end up blocking each
+other. Installing cert-manager first avoids the deadlock entirely; if
+you ever hit it anyway (e.g. reapplying out of order on an existing
+cluster), the fix is to temporarily delete both of the ALB
+Controller's webhook configs, let cert-manager finish, then reapply
+`v2_9_0_full.yaml` (next section) to recreate them:
+```bash
+kubectl delete mutatingwebhookconfiguration aws-load-balancer-webhook --ignore-not-found
+kubectl delete validatingwebhookconfiguration aws-load-balancer-webhook --ignore-not-found
+```
+
+## 7. Install the AWS Load Balancer Controller
 
 This controller watches for `Ingress` objects and provisions/manages
 the actual ALB — it's what turns `12-ingress.yaml` (§15) into a real,
@@ -320,7 +356,7 @@ kubectl -n kube-system logs deployment/aws-load-balancer-controller --tail=20
 No `AccessDenied` in the logs means it's ready to provision an ALB
 once an `Ingress` shows up (§15).
 
-## 7. Build and push the 3 application images to ECR
+## 8. Build and push the 3 application images to ECR
 
 The database uses the stock `postgres` image — nothing to build there.
 The other 3 workloads (`backend`, `frontend1`, `frontend2`) need
@@ -349,7 +385,7 @@ docker push $ECR_REGISTRY/pathgate-eks-backend:latest
 
 Build and push both frontends using their EKS-specific Dockerfile —
 note these do **not** bake in an nginx config (see §0's explanation);
-that comes from the ConfigMap in §12:
+that comes from the ConfigMap in §13:
 ```bash
 docker build -f apps/frontend-insert/Dockerfile.eks -t $ECR_REGISTRY/pathgate-eks-frontend-insert:latest apps/frontend-insert
 docker push $ECR_REGISTRY/pathgate-eks-frontend-insert:latest
@@ -359,9 +395,9 @@ docker push $ECR_REGISTRY/pathgate-eks-frontend-list:latest
 ```
 
 Keep this shell session (or re-export `ECR_REGISTRY`) around — the
-Deployment templates in §14 need it.
+Deployment templates in §12 and §14 need it.
 
-## 8. Namespace and StorageClass
+## 9. Namespace and StorageClass
 
 ```bash
 kubectl apply -f v3-eks/manifests/00-namespace.yaml
@@ -375,7 +411,7 @@ kubectl get storageclass
 ```
 You should see `gp3` with `(default)` next to its name.
 
-## 9. Create the database credentials Secret
+## 10. Create the database credentials Secret
 
 Unlike the other manifests, this one is created **imperatively**
 rather than from a YAML file — for a Secret this small, typing the
@@ -391,7 +427,7 @@ kubectl create secret generic pathgate-db-credentials \
   --from-literal=POSTGRES_DB=pathgate
 ```
 Pick your own password for `POSTGRES_PASSWORD` — this is what both
-`db` (§10) and `backend` (§13) read via `envFrom: secretRef` to
+`db` (§11) and `backend` (§12) read via `envFrom: secretRef` to
 authenticate to Postgres.
 
 Confirm the keys (not the values) landed:
@@ -399,7 +435,7 @@ Confirm the keys (not the values) landed:
 kubectl get secret pathgate-db-credentials -n pathgate -o jsonpath='{.data}' | tr ',' '\n'
 ```
 
-## 10. Deploy the database
+## 11. Deploy the database
 
 ```bash
 kubectl apply -f v3-eks/manifests/03-db-statefulset.yaml
@@ -423,14 +459,14 @@ Ctrl-C once `db-0` shows `1/1 Running` and the PVC shows `Bound`. This
 can take a minute or two the first time — the EBS CSI driver has to
 actually provision and attach a real EBS volume.
 
-If the PVC sits `Pending`, see §17's troubleshooting entry before
+If the PVC sits `Pending`, see §19's troubleshooting entry before
 assuming something's broken — `WaitForFirstConsumer` binding mode
 means it's normal for it to stay `Pending` briefly until `db-0` is
 scheduled.
 
-## 11. Deploy the backend
+## 12. Deploy the backend
 
-Render the template with the registry value from §7:
+Render the template with the registry value from §8:
 ```bash
 envsubst < v3-eks/manifests/05-backend-deployment.yaml.template > v3-eks/manifests/05-backend-deployment.yaml
 ```
@@ -442,7 +478,7 @@ deploy:
 grep -n '\${' v3-eks/manifests/05-backend-deployment.yaml && echo "STOP: placeholder left unrendered" || echo "clean"
 ```
 It should print `clean`. If it doesn't, `ECR_REGISTRY` wasn't exported
-in this shell — re-export it from §7 and re-run `envsubst`.
+in this shell — re-export it from §8 and re-run `envsubst`.
 
 ```bash
 kubectl apply -f v3-eks/manifests/05-backend-deployment.yaml
@@ -454,10 +490,10 @@ kubectl get pods -n pathgate -l app=backend -w
 ```
 Ctrl-C once both replicas show `Running` and `READY 1/1`. If they
 don't, check `kubectl logs -n pathgate -l app=backend` — a common
-first-run cause is the Secret from §9 not existing yet or a typo in
+first-run cause is the Secret from §10 not existing yet or a typo in
 one of its keys.
 
-## 12. Create the nginx ConfigMaps
+## 13. Create the nginx ConfigMaps
 
 These are created directly from the same `nginx.eks.conf` files the
 frontend images reference at runtime — no separate ConfigMap YAML, so
@@ -485,14 +521,14 @@ kubectl get configmap -n pathgate
 kubectl describe configmap frontend1-nginx-config -n pathgate
 ```
 
-## 13. Deploy the frontends
+## 14. Deploy the frontends
 
 Render both templates with the same `ECR_REGISTRY`:
 ```bash
 envsubst < v3-eks/manifests/07-frontend1-deployment.yaml.template > v3-eks/manifests/07-frontend1-deployment.yaml
 envsubst < v3-eks/manifests/09-frontend2-deployment.yaml.template > v3-eks/manifests/09-frontend2-deployment.yaml
 ```
-Same placeholder check as §11, for both files this time:
+Same placeholder check as §12, for both files this time:
 ```bash
 grep -n '\${' v3-eks/manifests/07-frontend1-deployment.yaml v3-eks/manifests/09-frontend2-deployment.yaml && echo "STOP: placeholder left unrendered" || echo "clean"
 ```
@@ -510,18 +546,18 @@ kubectl get pods -n pathgate -l 'app in (frontend1,frontend2)' -w
 Ctrl-C once all 4 Pods (2 per frontend) show `Running`, `1/1`. If a
 Pod is `Running` but the readiness probe never passes, `kubectl
 describe pod <name> -n pathgate` will usually show nginx failing to
-start — check that the ConfigMap from §12 actually contains valid
+start — check that the ConfigMap from §13 actually contains valid
 nginx config (`kubectl exec` into the Pod and `cat
 /etc/nginx/conf.d/default.conf` if unsure).
 
-## 14. Deploy the Ingress
+## 15. Deploy the Ingress
 
 ```bash
 kubectl apply -f v3-eks/manifests/11-ingressclass.yaml
 kubectl apply -f v3-eks/manifests/12-ingress.yaml
 ```
 
-The AWS Load Balancer Controller from §6 is what's actually watching
+The AWS Load Balancer Controller from §7 is what's actually watching
 for this — applying it triggers ALB creation in your AWS account.
 
 ```bash
@@ -531,7 +567,7 @@ Ctrl-C once the `ADDRESS` column populates (a real ALB DNS name) —
 this typically takes 2-3 minutes, the ALB itself has to be provisioned
 in EC2, not just the Kubernetes object.
 
-## 15. Deploy the HPAs
+## 16. Deploy the HPAs
 
 ```bash
 kubectl apply -f v3-eks/manifests/13-hpa-backend.yaml
@@ -546,7 +582,7 @@ Each should show a real percentage under `TARGETS` (e.g. `3%/70%`),
 not `<unknown>/70%` — if you see `<unknown>`, metrics-server (§4) isn't
 reporting yet; give it another minute.
 
-## 16. Verify the app end-to-end
+## 17. Verify the app end-to-end
 
 ```bash
 INGRESS_ADDR=$(kubectl get ingress pathgate-ingress -n pathgate -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
@@ -561,7 +597,7 @@ curl -X POST http://$INGRESS_ADDR/app1/api/items -H 'Content-Type: application/j
 curl -s http://$INGRESS_ADDR/app2/api/items
 ```
 
-## 17. Watch HPA and Cluster Autoscaler actually do something
+## 18. Watch HPA and Cluster Autoscaler actually do something
 
 This is the part that's easy to skip and easy to miss the point of —
 both pieces of scaling only prove themselves under load:
@@ -589,7 +625,7 @@ default 5-minute-ish stabilization window before scaling in, Cluster
 Autoscaler waits ~10 minutes of a node being underutilized before
 removing it.
 
-## 18. Troubleshooting
+## 19. Troubleshooting
 
 - **PVC stuck `Pending`**: `kubectl describe pvc db-data-db-0 -n pathgate`.
   Two normal-vs-broken cases look identical at a glance — check the
@@ -603,7 +639,7 @@ removing it.
   `kubectl -n kube-system logs deployment/aws-load-balancer-controller`.
   Almost always a missing or stale IRSA annotation — re-verify with
   `kubectl get sa aws-load-balancer-controller -n kube-system -o yaml`
-  and re-run §6's `eksctl create iamserviceaccount` +
+  and re-run §7's `eksctl create iamserviceaccount` +
   `rollout restart` if the `eks.amazonaws.com/role-arn` annotation is
   missing.
 - **HPA shows `<unknown>/70%` and never changes**: metrics-server
@@ -623,7 +659,7 @@ removing it.
   reconnect, etc.) — re-export the variable and re-run the `envsubst`
   command for that specific file before applying it.
 
-## 19. Cost and cleanup
+## 20. Cost and cleanup
 
 This is the most expensive variant in the whole project to leave
 running — the EKS control plane alone is billed hourly regardless of
