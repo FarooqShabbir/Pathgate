@@ -7,7 +7,7 @@ kind: ClusterConfig
 
 metadata:
   name: pathgate-eks
-  region: us-east-1   # change to your region
+  region: ap-southeast-1   # change to your region
   version: "1.31"     # check `aws eks describe-addon-versions` for what's current
 
 iam:
