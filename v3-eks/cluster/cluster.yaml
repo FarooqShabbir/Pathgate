@@ -1,0 +1,43 @@
+# eksctl cluster definition. One managed node group -- everything in
+# this lab runs on real EC2-backed nodes, deliberately (see the
+# folder README for why Fargate was ruled out: db needs EBS, which
+# Fargate pods cannot mount at all).
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: pathgate-eks
+  region: us-east-1   # change to your region
+  version: "1.31"     # check `aws eks describe-addon-versions` for what's current
+
+iam:
+  # Required for IRSA (IAM Roles for Service Accounts): the EBS CSI
+  # driver, Cluster Autoscaler, and the AWS Load Balancer Controller
+  # each authenticate to AWS as a specific Kubernetes ServiceAccount
+  # bound to its OWN IAM role -- not by inheriting whatever the node's
+  # instance role can do. withOIDC:true is what makes that binding
+  # possible at all.
+  withOIDC: true
+
+managedNodeGroups:
+  - name: pathgate-ng
+    instanceType: t3.medium
+    desiredCapacity: 2
+    minSize: 2
+    maxSize: 4
+    volumeSize: 20
+    amiFamily: AmazonLinux2023
+    # No withAddonPolicies here on purpose -- that shortcut attaches
+    # permissions to the NODE's instance role, which every pod on the
+    # node can reach via the instance metadata service, regardless of
+    # which pod actually needs them. Every privileged component below
+    # gets its own narrowly-scoped IRSA role instead (see 02-setup-irsa.sh
+    # and the aws-ebs-csi-driver addon's wellKnownPolicies below).
+
+addons:
+  - name: vpc-cni
+  - name: coredns
+  - name: kube-proxy
+  - name: aws-ebs-csi-driver
+    wellKnownPolicies:
+      ebsCSIController: true   # eksctl auto-creates a dedicated IRSA role for this addon's ServiceAccount

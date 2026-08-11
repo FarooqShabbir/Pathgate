@@ -24,3 +24,10 @@ v2-serverless-aws/elastic-beanstalk/.ebextensions/
 # .template files are what's tracked
 v2-serverless-aws/ecs-fargate/.env.foundation
 v2-serverless-aws/ecs-fargate/*/ecs-params.yml
+
+# EKS: rendered manifests (real password, real ECR registry) --
+# the .yaml.template files are what's tracked
+v3-eks/manifests/02-secret.yaml
+v3-eks/manifests/05-backend-deployment.yaml
+v3-eks/manifests/07-frontend1-deployment.yaml
+v3-eks/manifests/09-frontend2-deployment.yaml

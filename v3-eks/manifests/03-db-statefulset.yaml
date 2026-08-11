@@ -1,0 +1,58 @@
+# StatefulSet, not Deployment -- the correct primitive for db,
+# deliberately. It pairs with the headless Service in
+# 04-db-service.yaml to give this Pod a stable identity (db-0), and
+# volumeClaimTemplates below provisions its PVC as part of the
+# StatefulSet's own identity rather than a PVC wired up separately.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: db
+  namespace: pathgate
+spec:
+  serviceName: db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db
+  template:
+    metadata:
+      labels:
+        app: db
+    spec:
+      containers:
+        - name: db
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - secretRef:
+                name: pathgate-db-credentials
+          volumeMounts:
+            - name: db-data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "pathgate"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "pathgate"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+  volumeClaimTemplates:
+    - metadata:
+        name: db-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: gp3
+        resources:
+          requests:
+            storage: 10Gi

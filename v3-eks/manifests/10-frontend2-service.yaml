@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend2
+  namespace: pathgate
+spec:
+  selector:
+    app: frontend2
+  ports:
+    - port: 3000
+      targetPort: 3000

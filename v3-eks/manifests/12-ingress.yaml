@@ -1,0 +1,36 @@
+# This is nginx's replacement as the router -- and unlike nginx, only
+# TWO rules exist here (/app1, /app2). There is deliberately no /api
+# rule: routing /api/* straight to `backend` would skip the frontend
+# tier, same mistake the old ALB-based ECS Fargate/Terraform variant
+# made. Each frontend's own nginx (apps/frontend-insert/nginx.eks.conf)
+# is what proxies /api onward, preserving the full tier chain.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pathgate-ingress
+  namespace: pathgate
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    # Both frontends' nginx.eks.conf return 200 on "/" specifically so
+    # this one healthcheck path works for both target groups.
+    alb.ingress.kubernetes.io/healthcheck-path: /
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          - path: /app1
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend1
+                port:
+                  number: 3000
+          - path: /app2
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend2
+                port:
+                  number: 3000

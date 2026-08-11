@@ -1,0 +1,19 @@
+# gp3 isn't the cluster's default StorageClass out of the box just
+# because the EBS CSI driver addon is installed -- the driver can
+# provision volumes, but something still has to declare gp3 as a
+# StorageClass and mark it default, or db's PVC has nothing to bind to.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: ebs.csi.aws.com
+# WaitForFirstConsumer (not the default Immediate) delays creating the
+# actual EBS volume until db's Pod is scheduled -- so the volume gets
+# created in the SAME Availability Zone the Pod landed in. Immediate
+# binding can create the volume in an AZ with no room for the Pod,
+# and then it can never attach.
+volumeBindingMode: WaitForFirstConsumer
+parameters:
+  type: gp3

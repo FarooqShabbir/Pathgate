@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: pathgate
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: ${ECR_REGISTRY}/pathgate-eks-backend:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: STORAGE_BACKEND
+              value: postgres
+            - name: DB_HOST
+              value: "db"
+            - name: DB_PORT
+              value: "5432"
+          envFrom:
+            - secretRef:
+                name: pathgate-db-credentials
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi

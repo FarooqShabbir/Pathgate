@@ -1,0 +1,19 @@
+# Headless (clusterIP: None) -- the standard pairing for a
+# StatefulSet. A normal ClusterIP Service load-balances across
+# whatever Pods match its selector; a headless one instead gives DNS
+# queries for "db" the Pod IP(s) directly (db-0.db.pathgate.svc.cluster.local
+# for this specific replica). With one replica, backend's `DB_HOST: db`
+# resolves correctly either way -- the distinction matters once db
+# ever has more than one Pod.
+apiVersion: v1
+kind: Service
+metadata:
+  name: db
+  namespace: pathgate
+spec:
+  clusterIP: None
+  selector:
+    app: db
+  ports:
+    - port: 5432
+      targetPort: 5432

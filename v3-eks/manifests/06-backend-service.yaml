@@ -1,0 +1,14 @@
+# Not referenced by the Ingress at all -- only frontend1/frontend2's
+# own nginx talk to this, same tiering as v1/Elastic Beanstalk/ECS
+# Fargate (ecs-cli). See apps/frontend-insert/nginx.eks.conf.
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: pathgate
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 8000
+      targetPort: 8000
