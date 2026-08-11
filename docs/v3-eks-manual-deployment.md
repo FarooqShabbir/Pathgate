@@ -636,7 +636,7 @@ Open `http://$INGRESS_ADDR/app1` (insert-only) and
 `http://$INGRESS_ADDR/app2` (list-only) in a browser, or:
 ```bash
 curl -s http://$INGRESS_ADDR/app1/api/items
-curl -X POST http://$INGRESS_ADDR/app1/api/items -H 'Content-Type: application/json' -d '{"text":"hello from eks"}'
+curl -X POST http://$INGRESS_ADDR/app1/api/items -H 'Content-Type: application/json' -d '{"title":"hello from eks"}'
 curl -s http://$INGRESS_ADDR/app2/api/items
 ```
 
